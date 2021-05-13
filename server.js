@@ -121,7 +121,6 @@ app.post('/login', (req, res) => {
                 }
                 else{
                     res.send({
-                        authenticated: false,
                         error: {password: 'Incorrect Password'}
                     })
                 }
