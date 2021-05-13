@@ -2,6 +2,9 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
 const http = require('http').Server(app);
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const io = require('socket.io')(http, {
     cors: {
       origin: "*",
@@ -9,8 +12,6 @@ const io = require('socket.io')(http, {
       credentials: true
     }
   });
-
-const mongoose = require('mongoose');
 const cors = require('cors');
 
 require('dotenv').config();
@@ -20,16 +21,15 @@ if( PORT == null || PORT == ""){
     PORT = 8000;
 }
 const SALT_WORK_FACTOR = Number(process.env.SALT_WORK_FACTOR);
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
 
 app.use(cors())
 app.use(express.static(__dirname));
 app.use(bodyParser.urlencoded({extended: false}))
 app.use(bodyParser.json());
 
-let corsWhitelist = [
-    'http://10.37.39.39:3001',
-    'http://mattkearns.ddns.net:3001',
-    '*']
+let corsWhitelist = ['*'];
 var corsOptions = {
   origin: function (origin, callback) {
     if (corsWhitelist.indexOf(origin) !== -1) {
@@ -113,10 +113,10 @@ app.post('/login', (req, res) => {
                     })
                 }
                 //if the password does not match and previous session was not authenticated, do not authenticate
-                if(req.body.authenticated && isMatch || req.body.authenticated === 'true'){
+                if(isMatch){
+                    const accessToken = jwt.sign(user._doc, ACCESS_TOKEN_SECRET);
                     res.send({
-                        authenticated: true,
-                        user: user._doc
+                        accessToken: accessToken
                     })
                 }
                 else{
@@ -137,7 +137,20 @@ let Message = mongoose.model('Message', {
     ip: String,
 });
 
-app.get('/messages', (req,res) => {
+function authenticateToken(req, res, next) {
+    // Bearer TOKEN
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token == null ) return res.sendStatus(401);
+
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, user) =>{
+        if(err) return res.sendStatus(403);
+        req.user = user
+        next();
+    })
+}
+
+app.get('/messages', authenticateToken, (req,res) => {
     Message.find({}, (err,messages)=>{
         res.json(messages)
         console.log(req.socket.remoteAddress);
