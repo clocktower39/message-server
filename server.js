@@ -14,7 +14,7 @@ const io = require('socket.io')(http, {
   });
 const cors = require('cors');
 
-require('dotenv').config();
+// require('dotenv').config();
 const dbUrl = process.env.DBURL;
 let PORT = process.env.PORT;
 if( PORT == null || PORT == ""){
