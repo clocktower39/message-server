@@ -191,7 +191,7 @@ mongoose.connect(dbUrl,
     console.log('mongo db connection', err)
 })
 
-let server = http.listen(3000, ()=> {
-    console.log(`Server is listening on port ${server.address().port}`);
+let server = http.listen(PORT, ()=> {
+    console.log(`Server is listening on port ${PORT}`);
 });
 
