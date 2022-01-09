@@ -21,12 +21,12 @@ const signup_user = (req, res) => {
 };
 
 const login_user = (req, res) => {
-  User.findOne({ email: req.body.email }, function (err, user) {
+  User.findOne({ username: req.body.username }, function (err, user) {
     if (err) throw err;
     if (!user) {
       res.send({
         authenticated: false,
-        error: { email: "Username not found" },
+        error: { username: "Username not found" },
       });
     } else {
       user.comparePassword(req.body.password, function (err, isMatch) {

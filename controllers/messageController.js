@@ -1,14 +1,5 @@
 const Message = require("../models/message");
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
-    }
-  });
+const io = require('../io').io();
 
 const get_messages = (req, res) => {
   Message.find({}, (err,messages)=>{
@@ -29,11 +20,10 @@ const post_message = (req, res) => {
               sendStatus(500);
           }
           else{
-              io.emit('message', message)
+              global.io.emit('message', message)
               res.sendStatus(200);
           }
       });
-      console.log('last')
   }
   
   saveMessage();

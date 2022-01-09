@@ -5,6 +5,13 @@ const http = require('http').Server(app);
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+global.io = require('./io').initialize(http, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
 const userRoutes = require('./routes/userRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
@@ -15,13 +22,6 @@ if( PORT == null || PORT == ""){
     PORT = 8000;
 }
 
-const io = require('socket.io')(http, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
-    }
-  });
 
 app.use(cors())
 app.use(express.static(__dirname));
@@ -41,7 +41,7 @@ var corsOptions = {
   }
 }
 
-io.on('connection', (socket) => {
+global.io.on('connection', (socket) => {
     console.log('a user connected')
 });
 
