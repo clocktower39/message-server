@@ -5,6 +5,7 @@ const MessageSchema = new mongoose.Schema({
     message: String,
     timeStamp: { type: Date, default: Date.now },
     ip: String,
+    accountId: String,
 }, { minimize: false })
 
 const Message = mongoose.model('Message', MessageSchema);
