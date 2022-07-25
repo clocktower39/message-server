@@ -7,7 +7,6 @@ const signup_user = (req, res) => {
   let saveUser = () => {
     user.save((err) => {
       if (err) {
-        console.log(err);
         res.send({ error: { err } });
       } else {
         res.send({

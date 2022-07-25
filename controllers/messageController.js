@@ -1,8 +1,11 @@
 const Message = require("../models/message");
-const io = require('../io').io();
 
 const get_messages = (req, res) => {
-  Message.find({}, (err, messages) => {
+  Message.
+  find({}).
+  lean().
+  populate('user', 'username firstName lastName').
+  exec(function (err, messages) {
     res.json(messages)
     console.log(req.socket.remoteAddress);
   })
@@ -12,7 +15,7 @@ const post_message = (req, res) => {
   let message = new Message(req.body);
 
   let saveMessage = () => {
-    message.accountId = res.locals.user._id;
+    message.user = res.locals.user._id;
     message.timeStamp = new Date();
     message.ip = req.socket.remoteAddress.substr(7);
 
@@ -21,8 +24,10 @@ const post_message = (req, res) => {
         sendStatus(500);
       }
       else {
-        global.io.emit('message', message)
-        res.sendStatus(200);
+        Message.populate(message, { path: "user" }, function (err, message) {
+          global.io.emit('message', message)
+          res.send({ status: 200});
+        });
       }
     });
   }
@@ -31,7 +36,7 @@ const post_message = (req, res) => {
 };
 
 const delete_message = (req, res) => {
-  if (req.body.message.accountId === res.locals.user._id) {
+  if (req.body.message.user._id === res.locals.user._id) {
     Message.deleteOne({ _id: req.body.message._id }, (err, result) => {
       if (err) {
         res.send({...err});
