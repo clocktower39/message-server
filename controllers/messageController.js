@@ -4,7 +4,7 @@ const get_messages = (req, res) => {
   Message.
   find({}).
   lean().
-  populate('user', 'username firstName lastName').
+  populate('user', 'username firstName lastName profilePicture').
   exec(function (err, messages) {
     res.json(messages)
     console.log(req.socket.remoteAddress);

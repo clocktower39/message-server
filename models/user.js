@@ -9,6 +9,10 @@ const UserSchema = new mongoose.Schema({
     lastName: { type: String, required: true },
     email: { type: String, required: true },
     password: { type: String, required: true },
+    profilePicture: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "profilePictures.files"
+    },
 }, { minimize: false })
 
 UserSchema.pre('save', function(next) {
