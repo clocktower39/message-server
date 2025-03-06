@@ -154,6 +154,16 @@ const delete_profile_picture = async (req, res, next) => {
   }
 };
 
+const get_user_list = (req, res, next) => {
+  User.find()
+    .then((users) => {
+      res.send({
+        users,
+      });
+    })
+    .catch((err) => next(err));
+};
+
 const checkAuthLoginToken = (req, res, next) => {
   res.send("Authorized");
 };
@@ -165,4 +175,5 @@ module.exports = {
   get_profile_picture,
   delete_profile_picture,
   checkAuthLoginToken,
+  get_user_list,
 };

@@ -6,6 +6,7 @@ const { uploadProfilePicture } = require("../mygridfs");
 const router = express.Router();
 
 router.get('/checkAuthToken', auth, userController.checkAuthLoginToken);
+router.get('/users', auth, userController.get_user_list);
 router.get('/user/image/:id', userController.get_profile_picture);
 router.get('/user/remove/image/', auth, userController.delete_profile_picture);
 router.post('/user/image/upload', auth, uploadProfilePicture.single("file"), userController.upload_profile_picture);
