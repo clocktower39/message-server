@@ -1,6 +1,8 @@
 const User = require("../models/user");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
+const crypto = require('crypto');
+const path = require('path');
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 
 const signup_user = (req, res, next) => {
@@ -90,10 +92,12 @@ const upload_profile_picture = async (req, res, next) => {
       // Save the new file ID to the user profile
       user.profilePicture = new mongoose.Types.ObjectId(uploadStream.id);
       const savedUser = await user.save();
-      const tokens = createTokens(savedUser);
+      const accessToken = jwt.sign(user._doc, ACCESS_TOKEN_SECRET, {
+        expiresIn: "30d", // expires in 30 days
+      });
 
       res.status(200).json({
-        accessToken: tokens.accessToken,
+        accessToken,
       });
     });
 
