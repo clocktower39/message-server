@@ -1,8 +1,8 @@
 const User = require("../models/user");
 const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
-const crypto = require('crypto');
-const path = require('path');
+const crypto = require("crypto");
+const path = require("path");
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 
 const signup_user = (req, res, next) => {
@@ -160,6 +160,7 @@ const delete_profile_picture = async (req, res, next) => {
 
 const get_user_list = (req, res, next) => {
   User.find()
+    .select("_id username profilePicture")
     .then((users) => {
       res.send({
         users,
