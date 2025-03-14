@@ -3,7 +3,21 @@ const mongoose = require("mongoose");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const path = require("path");
+const { verifyRefreshToken } = require("../middleware/auth");
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
+
+const createTokens = (user) => {
+  const accessToken = jwt.sign(user._doc, ACCESS_TOKEN_SECRET, {
+    expiresIn: "180m", // Set a shorter expiration for access tokens
+  });
+
+  const refreshToken = jwt.sign(user._doc, REFRESH_TOKEN_SECRET, {
+    expiresIn: "90d", // Set a longer expiration for refresh tokens
+  });
+
+  return { accessToken, refreshToken };
+};
 
 const signup_user = (req, res, next) => {
   let user = new User(req.body);
@@ -30,15 +44,13 @@ const login_user = (req, res, next) => {
           error: { username: "Username not found" },
         });
       } else {
-        user
-          .comparePassword(req.body.password)
+        user.comparePassword(req.body.password)
           .then((isMatch) => {
             if (isMatch) {
-              const accessToken = jwt.sign(user._doc, ACCESS_TOKEN_SECRET, {
-                expiresIn: "30d", // expires in 30 days
-              });
+              const tokens = createTokens(user);
               res.send({
-                accessToken,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
               });
             } else {
               res.send({
@@ -50,6 +62,26 @@ const login_user = (req, res, next) => {
       }
     })
     .catch((err) => next(err));
+};
+
+const refresh_tokens = (req, res, next) => {
+  const { refreshToken } = req.body;
+
+  verifyRefreshToken(refreshToken)
+    .then((verifiedRefreshToken) => {
+      return User.findById(verifiedRefreshToken._id).exec();
+    })
+    .then((user) => {
+      if (!user) {
+        return res.status(404).send({ error: "User not found" });
+      }
+
+      const tokens = createTokens(user);
+      res.send({
+        accessToken: tokens.accessToken,
+      });
+    })
+    .catch((err) => res.status(403).send({ error: "Invalid refresh token", err }));
 };
 
 const upload_profile_picture = async (req, res, next) => {
