@@ -1,7 +1,9 @@
 const Message = require("../models/message");
 
 const get_messages = (req, res, next) => {
-  Message.find({})
+  const allowedChannelIds = res.locals.allowedChannelIds;
+
+  Message.find({ channel: { $in: allowedChannelIds } })
     .lean()
     .populate("user", "username firstName lastName profilePicture")
     .exec()
@@ -14,7 +16,6 @@ const get_messages = (req, res, next) => {
 
 const post_message = (req, res, next) => {
   let message = new Message(req.body);
-
   let saveMessage = () => {
     message.user = res.locals.user._id;
     message.timeStamp = new Date();
@@ -26,6 +27,7 @@ const post_message = (req, res, next) => {
         return Message.populate(message, { path: "user" });
       })
       .then((message) => {
+        console.log(message)
         global.io.emit("message", message);
         res.send({ status: 200 });
       })

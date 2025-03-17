@@ -44,7 +44,8 @@ const login_user = (req, res, next) => {
           error: { username: "Username not found" },
         });
       } else {
-        user.comparePassword(req.body.password)
+        user
+          .comparePassword(req.body.password)
           .then((isMatch) => {
             if (isMatch) {
               const tokens = createTokens(user);
@@ -201,17 +202,12 @@ const get_user_list = (req, res, next) => {
     .catch((err) => next(err));
 };
 
-const checkAuthLoginToken = (req, res, next) => {
-  res.send("Authorized");
-};
-
 module.exports = {
   signup_user,
   login_user,
   upload_profile_picture,
   get_profile_picture,
   delete_profile_picture,
-  checkAuthLoginToken,
   get_user_list,
   refresh_tokens,
 };

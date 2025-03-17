@@ -15,6 +15,7 @@ global.io = require("./io").initialize(http, {
 });
 const userRoutes = require("./routes/userRoutes");
 const messageRoutes = require("./routes/messageRoutes");
+const channelRoutes = require("./routes/channelRoutes");
 
 const dbUrl = process.env.DBURL;
 
@@ -29,6 +30,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use("/", userRoutes);
 app.use("/", messageRoutes);
+app.use("/", channelRoutes);
 
 let corsWhitelist = ["*"];
 var corsOptions = {
