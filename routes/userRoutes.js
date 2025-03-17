@@ -11,5 +11,6 @@ router.get('/user/remove/image/', verifyAccessToken, userController.delete_profi
 router.post('/user/image/upload', verifyAccessToken, uploadProfilePicture.single("file"), userController.upload_profile_picture);
 router.post('/login', userController.login_user);
 router.post('/signup', userController.signup_user);
+router.post("/refresh-tokens", userController.refresh_tokens);
 
 module.exports = router;

@@ -213,4 +213,5 @@ module.exports = {
   delete_profile_picture,
   checkAuthLoginToken,
   get_user_list,
+  refresh_tokens,
 };
