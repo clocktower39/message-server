@@ -27,7 +27,6 @@ const post_message = (req, res, next) => {
         return Message.populate(message, { path: "user" });
       })
       .then((message) => {
-        console.log(message)
         global.io.emit("message", message);
         res.send({ status: 200 });
       })
