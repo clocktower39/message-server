@@ -7,6 +7,12 @@ const MessageSchema = new mongoose.Schema(
     ip: String,
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     channel: { type: mongoose.Schema.Types.ObjectId, ref: "Channel", required: true },
+    reactions: [
+      {
+        emoji: { type: String, required: true },
+        users: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      },
+    ],
   },
   { minimize: false }
 );

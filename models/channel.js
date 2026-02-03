@@ -7,6 +7,7 @@ const ChannelSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   admins: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   users: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  bannedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 });
 
 const Channel = mongoose.model("Channel", ChannelSchema);

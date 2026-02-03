@@ -2,16 +2,17 @@ const Channel = require("../models/channel");
 
 const loadAllowedChannels = async (req, res, next) => {
   try {
-    // Find channels that are either public or include the current user in their users list
-    const allowedChannels = await Channel.find({
-      $or: [
-        { isPublic: true },
-        { users: res.locals.user._id }
-      ]
-    }).select('_id').lean();
+    const userId = res.locals.user._id;
 
-    // Attach the allowed channel IDs to res.locals for use in later middleware or controllers
-    res.locals.allowedChannelIds = allowedChannels.map(channel => channel._id);
+    // Keep the list to channels the user can access and isn't banned from.
+    const allowedChannels = await Channel.find({
+      bannedUsers: { $ne: userId },
+      $or: [{ isPublic: true }, { users: userId }],
+    })
+      .select("_id")
+      .lean();
+
+    res.locals.allowedChannelIds = allowedChannels.map((channel) => channel._id);
     next();
   } catch (error) {
     next(error);

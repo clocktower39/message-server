@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
-require('dotenv').config();
+require("dotenv").config({ quiet: true });
 const SALT_WORK_FACTOR = Number(process.env.SALT_WORK_FACTOR);
 
 const UserSchema = new mongoose.Schema({
@@ -15,24 +15,15 @@ const UserSchema = new mongoose.Schema({
     },
 }, { minimize: false })
 
-UserSchema.pre('save', function(next) {
-    let user = this;
+UserSchema.pre("save", async function () {
+    const user = this;
 
-    // only hash the password if it has been modified (or is new)
-    if (!user.isModified('password')) return next();
+    if (!user.isModified("password")) {
+        return;
+    }
 
-    // generate a salt
-    bcrypt.genSalt(SALT_WORK_FACTOR, function(err, salt) {
-        if (err) return next(err);
-
-        // hash the password using our new salt
-        bcrypt.hash(user.password, salt, function(err, hash) {
-            if (err) return next(err);
-            // override the cleartext password with the hashed one
-            user.password = hash;
-            next();
-        });
-    });
+    const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
+    user.password = await bcrypt.hash(user.password, salt);
 });
 
 UserSchema.methods.comparePassword = function(candidatePassword) {

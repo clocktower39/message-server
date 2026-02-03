@@ -5,6 +5,6 @@ exports.io = function () {
   return io;
 };
 
-exports.initialize = function(server) {
-  return io = sio(server);
+exports.initialize = function(server, options = {}) {
+  return io = sio(server, options);
 };
