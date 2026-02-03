@@ -9,6 +9,12 @@ const UserSchema = new mongoose.Schema({
     lastName: { type: String, required: true },
     email: { type: String, required: true },
     password: { type: String, required: true },
+    lastSeenAt: { type: Date },
+    friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    friendRequests: {
+        incoming: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
+        outgoing: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
+    },
     profilePicture: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "profilePictures.files"

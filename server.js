@@ -5,6 +5,9 @@ const mongoose = require("mongoose");
 const { ValidationError } = require("express-validation");
 const cors = require("cors");
 require("dotenv").config({ quiet: true });
+const jwt = require("jsonwebtoken");
+const User = require("./models/user");
+const Channel = require("./models/channel");
 
 const userRoutes = require("./routes/userRoutes");
 const messageRoutes = require("./routes/messageRoutes");
@@ -20,6 +23,7 @@ global.io = require("./io").initialize(httpServer, {
     credentials: true,
   },
 });
+const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
 
 const dbUrl = process.env.DBURL;
 
@@ -45,9 +49,44 @@ const getClientStatuses = () =>
     return statuses;
   }, {});
 
+const canAccessChannel = async (userId, channelId) => {
+  const channel = await Channel.findById(channelId).lean();
+  if (!channel) {
+    return false;
+  }
+
+  const normalizedUserId = userId.toString();
+  const bannedIds = (channel.bannedUsers || []).map((id) => id.toString());
+  if (bannedIds.includes(normalizedUserId)) {
+    return false;
+  }
+
+  if (channel.isPublic) {
+    return true;
+  }
+
+  const userIds = (channel.users || []).map((id) => id.toString());
+  return userIds.includes(normalizedUserId);
+};
+
+global.io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) {
+    return next(new Error("Unauthorized"));
+  }
+
+  jwt.verify(token, ACCESS_TOKEN_SECRET, (err, user) => {
+    if (err) {
+      return next(new Error("Unauthorized"));
+    }
+    socket.user = user;
+    next();
+  });
+});
+
 const registerSocketHandlers = () => {
   global.io.on("connection", (socket) => {
-    const userId = socket.handshake.query.userId;
+    const userId = socket.user?._id;
 
     if (userId) {
       connectedClients[userId] = socket.id;
@@ -60,8 +99,12 @@ const registerSocketHandlers = () => {
       socket.emit("currentClientStatuses", getClientStatuses());
     });
 
-    socket.on("join_channel", (channelId) => {
-      if (channelId) {
+    socket.on("join_channel", async (channelId) => {
+      if (!channelId || !userId) {
+        return;
+      }
+      const allowed = await canAccessChannel(userId, channelId);
+      if (allowed) {
         socket.join(`channel:${channelId}`);
       }
     });
@@ -72,8 +115,12 @@ const registerSocketHandlers = () => {
       }
     });
 
-    socket.on("typing", ({ channelId, userId: typingUserId, username }) => {
-      if (!channelId || !typingUserId) {
+    socket.on("typing", async ({ channelId, userId: typingUserId, username }) => {
+      if (!channelId || !typingUserId || typingUserId !== userId) {
+        return;
+      }
+      const allowed = await canAccessChannel(userId, channelId);
+      if (!allowed) {
         return;
       }
       socket.to(`channel:${channelId}`).emit("typing", {
@@ -83,8 +130,12 @@ const registerSocketHandlers = () => {
       });
     });
 
-    socket.on("stop_typing", ({ channelId, userId: typingUserId }) => {
-      if (!channelId || !typingUserId) {
+    socket.on("stop_typing", async ({ channelId, userId: typingUserId }) => {
+      if (!channelId || !typingUserId || typingUserId !== userId) {
+        return;
+      }
+      const allowed = await canAccessChannel(userId, channelId);
+      if (!allowed) {
         return;
       }
       socket.to(`channel:${channelId}`).emit("stop_typing", {
@@ -94,11 +145,16 @@ const registerSocketHandlers = () => {
     });
 
     socket.on("disconnect", () => {
+      console.log(`${userId} disconnected`);
       if (userId && connectedClients[userId]) {
         delete connectedClients[userId];
-        global.io.emit("clientStatusChanged", { userId, status: "offline" });
+        const lastSeenAt = new Date();
+        global.io.emit("clientStatusChanged", { userId, status: "offline", lastSeenAt });
+        if (mongoose.connection.readyState === 1) {
+          User.findByIdAndUpdate(userId, { lastSeenAt }).catch(() => null);
+        }
+        return;
       }
-      console.log(`${userId} disconnected`);
     });
   });
 };

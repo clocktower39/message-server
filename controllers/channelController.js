@@ -1,4 +1,6 @@
 const Channel = require("../models/channel");
+const ChannelRead = require("../models/channelRead");
+const User = require("../models/user");
 
 const uniqueIds = (ids = []) => {
   const normalized = ids
@@ -23,6 +25,11 @@ const buildChannelUsers = ({ isPublic, users, admins, createdBy }) => {
   return uniqueIds([...(users || []), ...(admins || []), createdBy]);
 };
 
+const buildDmKey = (userId, targetId) => {
+  const normalized = [userId.toString(), targetId.toString()].sort();
+  return normalized.join(":");
+};
+
 const canModerateTarget = (channel, actorId, targetId) => {
   const creatorId = channel.createdBy?.toString();
   const normalizedActorId = actorId.toString();
@@ -40,6 +47,21 @@ const canModerateTarget = (channel, actorId, targetId) => {
   }
 
   return { allowed: true };
+};
+
+const canAccessChannel = (channel, userId) => {
+  const normalizedUserId = userId.toString();
+  const bannedIds = (channel.bannedUsers || []).map((id) => id.toString());
+  if (bannedIds.includes(normalizedUserId)) {
+    return false;
+  }
+
+  if (channel.isPublic) {
+    return true;
+  }
+
+  const userIds = (channel.users || []).map((id) => id.toString());
+  return userIds.includes(normalizedUserId);
 };
 
 const notifyUser = (userId, event, payload) => {
@@ -103,6 +125,7 @@ const create_channel = (req, res, next) => {
     name,
     description,
     isPublic: Boolean(isPublic),
+    isDM: false,
     createdBy: creatorId,
     admins: normalizedAdmins,
     users: normalizedUsers,
@@ -128,6 +151,10 @@ const update_channel = (req, res, next) => {
     .then((channel) => {
       if (!channel) {
         return res.status(404).send({ error: "Channel not found." });
+      }
+
+      if (channel.isDM) {
+        return res.status(403).send({ error: "Direct messages cannot be edited." });
       }
 
       if (!canManageChannel(channel, userId)) {
@@ -190,6 +217,14 @@ const delete_channel = (req, res, next) => {
         return res.status(404).send({ error: "Channel not found." });
       }
 
+      if (channel.isDM) {
+        const memberIds = (channel.users || []).map((memberId) => memberId.toString());
+        if (!memberIds.includes(userId.toString())) {
+          return res.status(403).send({ error: "Not authorized to delete this DM." });
+        }
+        return Channel.deleteOne({ _id: channel._id });
+      }
+
       if (!canManageChannel(channel, userId)) {
         return res.status(403).send({ error: "Not authorized to manage this channel." });
       }
@@ -202,6 +237,118 @@ const delete_channel = (req, res, next) => {
       }
     })
     .catch((err) => next(err));
+};
+
+const mark_channel_read = async (req, res, next) => {
+  try {
+    const userId = res.locals.user._id;
+    const channelId = req.params.id;
+    const channel = await Channel.findById(channelId);
+    if (!channel) {
+      return res.status(404).send({ error: "Channel not found." });
+    }
+    if (!canAccessChannel(channel, userId)) {
+      return res.status(403).send({ error: "Not authorized for this channel." });
+    }
+
+    const lastReadAt = new Date();
+    const read = await ChannelRead.findOneAndUpdate(
+      { user: userId, channel: channelId },
+      { lastReadAt },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    if (global.io) {
+      global.io.to(`channel:${channelId}`).emit("read_receipt", {
+        channelId: channelId.toString(),
+        userId: userId.toString(),
+        lastReadAt: read.lastReadAt,
+      });
+    }
+
+    res.json({
+      channelId: channelId.toString(),
+      userId: userId.toString(),
+      lastReadAt: read.lastReadAt,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const get_channel_read_status = async (req, res, next) => {
+  try {
+    const userId = res.locals.user._id;
+    const channelId = req.params.id;
+    const channel = await Channel.findById(channelId).lean();
+    if (!channel) {
+      return res.status(404).send({ error: "Channel not found." });
+    }
+    if (!canAccessChannel(channel, userId)) {
+      return res.status(403).send({ error: "Not authorized for this channel." });
+    }
+
+    const reads = await ChannelRead.find({ channel: channelId })
+      .select("user lastReadAt")
+      .lean();
+
+    res.json({
+      channelId: channelId.toString(),
+      reads: reads.map((read) => ({
+        userId: read.user.toString(),
+        lastReadAt: read.lastReadAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const create_dm = async (req, res, next) => {
+  try {
+    const creatorId = res.locals.user._id;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ error: "User ID is required." });
+    }
+
+    if (creatorId.toString() === userId.toString()) {
+      return res.status(400).send({ error: "Cannot start a DM with yourself." });
+    }
+
+    const targetUser = await User.findById(userId).select("_id username").lean();
+    if (!targetUser) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    const dmKey = buildDmKey(creatorId, userId);
+    const existing = await Channel.findOne({ dmKey }).populate(
+      "users createdBy admins bannedUsers",
+      "_id username firstName lastName profilePicture"
+    );
+
+    if (existing) {
+      return res.json(existing);
+    }
+
+    const channel = new Channel({
+      name: `dm:${dmKey}`,
+      description: "",
+      isPublic: false,
+      isDM: true,
+      dmKey,
+      createdBy: creatorId,
+      admins: [creatorId],
+      users: uniqueIds([creatorId, userId]),
+    });
+
+    const saved = await channel.save();
+    await saved.populate("users createdBy admins bannedUsers", "_id username firstName lastName profilePicture");
+    res.status(201).json(saved);
+  } catch (err) {
+    next(err);
+  }
 };
 
 const kick_user = (req, res, next) => {
@@ -354,6 +501,9 @@ module.exports = {
   create_channel,
   update_channel,
   delete_channel,
+  create_dm,
+  mark_channel_read,
+  get_channel_read_status,
   kick_user,
   ban_user,
   unban_user,

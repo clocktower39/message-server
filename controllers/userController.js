@@ -19,6 +19,30 @@ const createTokens = (user) => {
   return { accessToken, refreshToken };
 };
 
+const uniqueIds = (ids = []) => {
+  const normalized = ids
+    .filter(Boolean)
+    .map((id) => id.toString());
+  return [...new Set(normalized)];
+};
+
+const getFriendPayload = async (userId) => {
+  const user = await User.findById(userId)
+    .populate("friends", "_id username profilePicture lastSeenAt")
+    .populate("friendRequests.incoming", "_id username profilePicture lastSeenAt")
+    .populate("friendRequests.outgoing", "_id username profilePicture lastSeenAt");
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    friends: user.friends || [],
+    incoming: user.friendRequests?.incoming || [],
+    outgoing: user.friendRequests?.outgoing || [],
+  };
+};
+
 const signup_user = (req, res, next) => {
   let user = new User(req.body);
   let saveUser = () => {
@@ -193,13 +217,184 @@ const delete_profile_picture = async (req, res, next) => {
 
 const get_user_list = (req, res, next) => {
   User.find()
-    .select("_id username profilePicture")
+    .select("_id username profilePicture lastSeenAt")
     .then((users) => {
       res.send({
         users,
       });
     })
     .catch((err) => next(err));
+};
+
+const get_friends = async (req, res, next) => {
+  try {
+    const payload = await getFriendPayload(res.locals.user._id);
+    if (!payload) {
+      return res.status(404).send({ error: "User not found" });
+    }
+    res.send(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const request_friend = async (req, res, next) => {
+  try {
+    const requesterId = res.locals.user._id.toString();
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ error: "User ID is required." });
+    }
+
+    if (requesterId === userId.toString()) {
+      return res.status(400).send({ error: "Cannot friend yourself." });
+    }
+
+    const requester = await User.findById(requesterId);
+    const target = await User.findById(userId);
+    if (!requester || !target) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    const requesterFriends = uniqueIds(requester.friends || []);
+    if (requesterFriends.includes(userId.toString())) {
+      return res.status(400).send({ error: "Already friends." });
+    }
+
+    const outgoing = uniqueIds(requester.friendRequests?.outgoing || []);
+    if (outgoing.includes(userId.toString())) {
+      const payload = await getFriendPayload(requesterId);
+      return res.send(payload);
+    }
+
+    requester.friendRequests = {
+      incoming: requester.friendRequests?.incoming || [],
+      outgoing: uniqueIds([...(requester.friendRequests?.outgoing || []), userId]),
+    };
+
+    target.friendRequests = {
+      incoming: uniqueIds([...(target.friendRequests?.incoming || []), requesterId]),
+      outgoing: target.friendRequests?.outgoing || [],
+    };
+
+    await requester.save();
+    await target.save();
+
+    const payload = await getFriendPayload(requesterId);
+    res.send(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const accept_friend = async (req, res, next) => {
+  try {
+    const receiverId = res.locals.user._id.toString();
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ error: "User ID is required." });
+    }
+
+    const receiver = await User.findById(receiverId);
+    const requester = await User.findById(userId);
+    if (!receiver || !requester) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    const incoming = uniqueIds(receiver.friendRequests?.incoming || []);
+    if (!incoming.includes(userId.toString())) {
+      return res.status(400).send({ error: "No pending request from this user." });
+    }
+
+    receiver.friendRequests = {
+      incoming: incoming.filter((id) => id !== userId.toString()),
+      outgoing: receiver.friendRequests?.outgoing || [],
+    };
+    requester.friendRequests = {
+      incoming: requester.friendRequests?.incoming || [],
+      outgoing: uniqueIds(requester.friendRequests?.outgoing || []).filter(
+        (id) => id !== receiverId
+      ),
+    };
+
+    receiver.friends = uniqueIds([...(receiver.friends || []), userId]);
+    requester.friends = uniqueIds([...(requester.friends || []), receiverId]);
+
+    await receiver.save();
+    await requester.save();
+
+    const payload = await getFriendPayload(receiverId);
+    res.send(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const decline_friend = async (req, res, next) => {
+  try {
+    const receiverId = res.locals.user._id.toString();
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ error: "User ID is required." });
+    }
+
+    const receiver = await User.findById(receiverId);
+    const requester = await User.findById(userId);
+    if (!receiver || !requester) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    const incoming = uniqueIds(receiver.friendRequests?.incoming || []);
+    receiver.friendRequests = {
+      incoming: incoming.filter((id) => id !== userId.toString()),
+      outgoing: receiver.friendRequests?.outgoing || [],
+    };
+    requester.friendRequests = {
+      incoming: requester.friendRequests?.incoming || [],
+      outgoing: uniqueIds(requester.friendRequests?.outgoing || []).filter(
+        (id) => id !== receiverId
+      ),
+    };
+
+    await receiver.save();
+    await requester.save();
+
+    const payload = await getFriendPayload(receiverId);
+    res.send(payload);
+  } catch (err) {
+    next(err);
+  }
+};
+
+const remove_friend = async (req, res, next) => {
+  try {
+    const requesterId = res.locals.user._id.toString();
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).send({ error: "User ID is required." });
+    }
+
+    const requester = await User.findById(requesterId);
+    const target = await User.findById(userId);
+    if (!requester || !target) {
+      return res.status(404).send({ error: "User not found." });
+    }
+
+    requester.friends = uniqueIds(requester.friends || []).filter((id) => id !== userId.toString());
+    target.friends = uniqueIds(target.friends || []).filter((id) => id !== requesterId);
+
+    await requester.save();
+    await target.save();
+
+    const payload = await getFriendPayload(requesterId);
+    res.send(payload);
+  } catch (err) {
+    next(err);
+  }
 };
 
 module.exports = {
@@ -209,5 +404,10 @@ module.exports = {
   get_profile_picture,
   delete_profile_picture,
   get_user_list,
+  get_friends,
+  request_friend,
+  accept_friend,
+  decline_friend,
+  remove_friend,
   refresh_tokens,
 };
