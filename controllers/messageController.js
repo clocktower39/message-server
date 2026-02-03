@@ -9,10 +9,11 @@ const get_messages = async (req, res, next) => {
     const { channelId, cursor, limit } = req.query;
 
     if (!channelId) {
-      const messages = await Message.find({ channel: { $in: allowedChannelIds } })
-        .lean()
-        .populate("user", "username firstName lastName profilePicture")
-        .exec();
+    const messages = await Message.find({ channel: { $in: allowedChannelIds } })
+      .lean()
+      .populate("user", "username firstName lastName profilePicture")
+      .populate("reactions.users", "_id username")
+      .exec();
       return res.json({ messages, hasMore: false, nextCursor: null });
     }
 
@@ -34,6 +35,7 @@ const get_messages = async (req, res, next) => {
       .limit(parsedLimit + 1)
       .lean()
       .populate("user", "username firstName lastName profilePicture")
+      .populate("reactions.users", "_id username")
       .exec();
 
     const hasMore = page.length > parsedLimit;
@@ -142,6 +144,7 @@ const toggle_reaction = async (req, res, next) => {
 
     message.reactions = reactions;
     await message.save();
+    await message.populate("reactions.users", "_id username");
 
     if (channelId) {
       global.io.to(`channel:${channelId}`).emit("message_reaction", {
